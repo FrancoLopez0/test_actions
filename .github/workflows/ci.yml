@@ -52,8 +52,7 @@ jobs:
       run: |
         mkdir -p build_sil
         cd build_sil
-        # We DON'T use the Pico SDK's toolchain file here 
-        # because we want to use the host's native GCC (x86_64)
-        cmake .. -GNinja
+        # Configure ONLY the SIL tests directory to avoid Pico SDK hardware dependencies
+        cmake ../test/SIL -GNinja
         ninja test_blinky
-        ctest -R "${{ steps.impacted-tests.outputs.TESTS }}" --output-on-failure
+        ctest --output-on-failure -R "${{ steps.impacted-tests.outputs.TESTS }}"
