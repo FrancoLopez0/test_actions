@@ -1,0 +1,59 @@
+name: RP2350 CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Get changed files
+      id: changed-files
+      uses: tj-actions/changed-files@v45
+
+    - name: Get impacted tests
+      id: impacted-tests
+      run: |
+        IMPACTED=$(python3 tools/get_impacted_tests.py ${{ steps.changed-files.outputs.all_changed_files }})
+        echo "TESTS=$IMPACTED" >> $GITHUB_OUTPUT
+
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential cmake ninja-build clang-tidy cppcheck
+
+    - name: Setup Pico SDK
+      run: |
+        git clone https://github.com/raspberrypi/pico-sdk.git --branch master
+        cd pico-sdk
+        git submodule update --init
+        echo "PICO_SDK_PATH=$PWD" >> $GITHUB_ENV
+
+    - name: Static Analysis (cppcheck)
+      run: |
+        cppcheck --enable=all --error-exitcode=1 --suppressions-list=.cppcheck_suppressions -I src/hal -I src/middleware -I src/app src/ libs/
+
+    - name: Build RP2350 Firmware (Cross-compile)
+      run: |
+        mkdir -p build_arm
+        cd build_arm
+        cmake .. -DPICO_BOARD=pico2 -GNinja
+        ninja firmware_binary
+
+    - name: Build & Run SIL Tests (Host Native)
+      if: steps.impacted-tests.outputs.TESTS != ''
+      run: |
+        mkdir -p build_sil
+        cd build_sil
+        # We DON'T use the Pico SDK's toolchain file here 
+        # because we want to use the host's native GCC (x86_64)
+        cmake .. -GNinja
+        ninja test_blinky
+        ctest -R "${{ steps.impacted-tests.outputs.TESTS }}" --output-on-failure

@@ -1,0 +1,5 @@
+missingInclude
+missingIncludeSystem
+checkersReport
+unusedFunction:src/hal/*
+unusedFunction:src/middleware/*

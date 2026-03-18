@@ -1,0 +1,32 @@
+# CMake build files
+build/
+build_sil/
+build_hil/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# VSCode configuration
+.vscode/
+
+# Project-specific artifacts (Pico 2 / RP2350)
+*.elf
+*.bin
+*.uf2
+*.hex
+*.map
+*.list
+
+# Temporary and editor files
+*~
+*.swp
+.DS_Store
+
+# Toolchain and IDE integration files
+.gcc-flags.json
+compile_commands.json
+.cache/
+.atl
+
+openspec/
