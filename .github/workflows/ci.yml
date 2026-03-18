@@ -44,8 +44,8 @@ jobs:
       run: |
         mkdir -p build_arm
         cd build_arm
-        cmake .. -DPICO_BOARD=pico2 -GNinja
-        ninja firmware_binary
+        cmake .. -DPICO_BOARD=pico2 -DPICO_DISABLE_AUTO_FETCH_PICOTOOL=1 -GNinja
+        ninja pico2_template
 
     - name: Build & Run SIL Tests (Host Native)
       if: steps.impacted-tests.outputs.TESTS != ''
