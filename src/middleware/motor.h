@@ -69,7 +69,7 @@ typedef struct{
 
 motor_error_t config_gpio_pwm(uint8_t pin);
 motor_error_t config_gpio_output(uint8_t pin);
-motor_error_t motor_config(motor_t *m, motor_config_t *motor_config);
+motor_error_t motor_config(motor_t *m, const motor_config_t *motor_config);
 motor_error_t motor_set_lvl(motor_t *m, float duty_cycle);
 motor_error_t motor_set_dir(motor_t *m, dir_t dir);
 motor_error_t motor_raise_error(const char* context, motor_error_t res);
