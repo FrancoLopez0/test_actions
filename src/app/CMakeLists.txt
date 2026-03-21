@@ -2,6 +2,8 @@ add_library(app STATIC
     firmware.c
     app_blinky.c
     app_blinky.h
+    app_motor.h
+    app_motor.c
 )
 
 target_include_directories(app PUBLIC

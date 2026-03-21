@@ -1,95 +1,109 @@
-# Usage: .\tools\run_test.ps1 -TestName blinky [-HW] [-Port COM3]
-
+# Usage: .\tools\run_test.ps1 -TestName motor [-HW] [-Port COM7] [-ShowLogs]
 param (
     [Parameter(Mandatory=$true)]
     [string]$TestName,
-    
     [switch]$HW,
+    [string]$Port = "COM3",
+    [switch]$ShowLogs,
     
-    [string]$Port = "COM3"
+    # Parameterized paths (Relative to User Profile)
+    [string]$CMakeCmd = "$HOME\.pico-sdk\cmake\v3.31.5\bin\cmake.exe",
+    [string]$NinjaPath = "$HOME\.pico-sdk\ninja\v1.12.1\ninja.exe",
+    [string]$PicotoolCmd = "$HOME\.pico-sdk\picotool\2.2.0-a4\picotool\picotool.exe"
 )
 
+# Ensure UTF8 for special characters
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 $Target = "test_$TestName"
-$BuildDir = "build_sil"
+$BuildDir = if ($HW) { "build_hil" } else { "build_sil" }
 
+# 1. Build
+Write-Host "--- Building ${Target} ---" -ForegroundColor Cyan
 if ($HW) {
-    $BuildDir = "build_hil"
-}
-
-Write-Host "🚀 Running $(if($HW){"HIL"}else{"SIL"}) test: $TestName" -ForegroundColor Cyan
-
-if ($HW) {
-    # 1. Check for picotool
-    if (!(Get-Command picotool -ErrorAction SilentlyContinue)) {
-        Write-Host "❌ picotool is required but not found in PATH." -ForegroundColor Red
-        exit 1
-    }
-
-    Write-Host "🔍 Checking for RP2350 device..." -ForegroundColor Gray
-    picotool info | Out-Null # Just to check connectivity
-
-    Write-Host "⚙️  Configuring HIL build..." -ForegroundColor Gray
-    cmake -S . -B $BuildDir -DPICO_BOARD=pico2 -GNinja
+    & $CMakeCmd -S . -B $BuildDir -DPICO_BOARD=pico2 -GNinja "-DCMAKE_MAKE_PROGRAM=$NinjaPath" -DENABLE_HIL_TESTS=ON | Out-Null
 } else {
-    Write-Host "⚙️  Configuring SIL build..." -ForegroundColor Gray
-    cmake -S test/SIL -B $BuildDir -GNinja
+    & $CMakeCmd -S test/SIL -B $BuildDir -GNinja "-DCMAKE_MAKE_PROGRAM=$NinjaPath" | Out-Null
 }
+& $CMakeCmd --build $BuildDir --target $Target | Out-Null
 
-Write-Host "🏗️  Building target: $Target..." -ForegroundColor Gray
-cmake --build $BuildDir --target $Target
-
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "✅ Build successful." -ForegroundColor Green
-    if ($HW) {
-        $ElfFile = ".\$BuildDir\test\HIL\$Target.elf"
-        Write-Host "⚡ Flashing $ElfFile to RP2350..." -ForegroundColor Yellow
-        picotool load -x $ElfFile
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "⏳ Waiting for serial port $Port to appear..." -ForegroundColor Gray
-            $MaxRetries = 20
-            $Count = 0
-            $PortFound = $false
-            while ($Count -lt $MaxRetries) {
-                if ([System.IO.Ports.SerialPort]::GetPortNames() -contains $Port) {
-                    $PortFound = $true
-                    break
-                }
-                Start-Sleep -Milliseconds 500
-                $Count++
-            }
-
-            if ($PortFound) {
-                Write-Host "📡 Opening serial port $Port at 115200..." -ForegroundColor Cyan
-                Write-Host "💡 Press Ctrl+C to stop monitoring." -ForegroundColor Gray
-                
-                # Simple serial monitor in PowerShell
-                $port_serial = New-Object System.IO.Ports.SerialPort $Port, 115200, None, 8, one
-                try {
-                    $port_serial.Open()
-                    while ($port_serial.IsOpen) {
-                        if ($port_serial.BytesToRead -gt 0) {
-                            $data = $port_serial.ReadExisting()
-                            Write-Host $data -NoNewline
-                        }
-                        Start-Sleep -Milliseconds 100
-                    }
-                } catch {
-                    Write-Host "❌ Could not open $Port. Ensure the port is not in use." -ForegroundColor Red
-                } finally {
-                    if ($port_serial -ne $null -and $port_serial.IsOpen) {
-                        $port_serial.Close()
-                    }
-                }
-            } else {
-                Write-Host "❌ Serial port $Port not found after timeout." -ForegroundColor Red
-            }
-        }
-    } else {
-        Write-Host "🏃 Executing SIL test..." -ForegroundColor Gray
-        & ".\$BuildDir\$Target.exe"
-    }
-} else {
-    Write-Host "❌ Build failed for target: $Target" -ForegroundColor Red
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error: Build failed." -ForegroundColor Red
     exit 1
+}
+
+# 2. Flash and Run
+if ($HW) {
+    $ElfFile = "$BuildDir\test\HIL\$Target.elf"
+    Write-Host "Flashing ${ElfFile}..." -ForegroundColor Yellow
+    & $PicotoolCmd load -f -x $ElfFile | Out-Null
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Waiting for ${Port} (Timeout: 20s)..." -ForegroundColor Gray
+        
+        $portObj = New-Object System.IO.Ports.SerialPort
+        $portObj.PortName = $Port
+        $portObj.BaudRate = 115200
+        $portObj.DtrEnable = $true
+        $portObj.RtsEnable = $true
+
+        $attempts = 0
+        while (-not $portObj.IsOpen -and $attempts -lt 40) {
+            try { $portObj.Open() } catch { Start-Sleep -Milliseconds 500; $attempts++; Write-Host "." -NoNewline }
+        }
+
+        if (-not $portObj.IsOpen) {
+            Write-Host "`nError: Could not open ${Port}." -ForegroundColor Red
+            $available = [System.IO.Ports.SerialPort]::GetPortNames()
+            Write-Host "Available ports: [ $($available -join ', ') ]" -ForegroundColor Gray
+            exit 1
+        }
+
+        Write-Host "`nConnected. Monitoring tests...`n" -ForegroundColor Green
+        
+        $passCount = 0
+        $failCount = 0
+
+        try {
+            while ($portObj.IsOpen) {
+                if ($portObj.BytesToRead -gt 0) {
+                    $line = $portObj.ReadLine().Trim()
+                    
+                    # Unity Format: "path/to/file.c:line:test:PASS" or "FAIL"
+                    if ($line -match "(.+\.c):(\d+):(.+):(PASS|FAIL)(.*)") {
+                        # Extract only filename (leaf) from the potential path
+                        $fileFull = $Matches[1]
+                        $file = Split-Path $fileFull -Leaf
+                        
+                        $fline = $Matches[2]
+                        $test = $Matches[3]
+                        $status = $Matches[4]
+                        
+                        $output = ".. ${file}:${fline}:${test}:${status} .."
+                        if ($status -eq "PASS") {
+                            Write-Host $output -ForegroundColor Green
+                            $passCount++
+                        } else {
+                            Write-Host $output -ForegroundColor Red
+                            $failCount++
+                        }
+                    } elseif ($line -match "Tests (\d+) Failures") {
+                        Write-Host "`n${line}" -ForegroundColor Yellow
+                        break
+                    } elseif ($ShowLogs) {
+                        Write-Host $line -ForegroundColor Gray
+                    }
+                }
+                Start-Sleep -Milliseconds 10
+            }
+        } finally {
+            $portObj.Close()
+            Write-Host "`n--- Final Summary ---" -ForegroundColor Cyan
+            Write-Host "Tests Passed: ${passCount}" -ForegroundColor Green
+            Write-Host "Tests Failed: ${failCount}" -ForegroundColor Red
+        }
+    }
+} else {
+    Write-Host "Executing SIL test..." -ForegroundColor Cyan
+    & ".\$BuildDir\$Target.exe"
 }

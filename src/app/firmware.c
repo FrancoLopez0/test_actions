@@ -3,6 +3,8 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "app_blinky.h"
+#include "app_motor.h"
+#include "logging.h"
 
 // Task handle for the blinky task
 static TaskHandle_t xBlinkyTaskHandle = NULL;
@@ -21,7 +23,7 @@ void main_core1(void) {
 void start_firmware(void) {
     // Initialize standard I/O for debugging and communication
     stdio_init_all();
-
+    log_init();
     // Create the Blinky task
     // This task will alternate the state of the default onboard LED
     xTaskCreate(
@@ -31,6 +33,15 @@ void start_firmware(void) {
         NULL,               // Task parameters
         1,                  // Task priority
         &xBlinkyTaskHandle  // Task handle
+    );
+
+    xTaskCreate(
+        task_motor,    // Task function
+        "Motor task",       // Task name
+        1024,               // Stack size (in words)
+        NULL,               // Task parameters
+        1,                  // Task priority
+        NULL  // Task handle
     );
 
     // Demonstrate Symmetric Multi-Processing (SMP) affinity by pinning 

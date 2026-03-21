@@ -36,5 +36,7 @@ add_subdirectory(libs)
 add_subdirectory(third-party)
 
 # Testing subdirectories
-# add_subdirectory(test/SIL)
-add_subdirectory(test/HIL)
+option(ENABLE_HIL_TESTS "Enable Hardware-in-the-Loop tests" OFF)
+if(ENABLE_HIL_TESTS)
+    add_subdirectory(test/HIL)
+endif()
