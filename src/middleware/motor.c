@@ -162,7 +162,7 @@ motor_error_t config_gpio_pwm(uint8_t pin){
  * @param m Puntero a la estructura @ref motor_t que contiene los parámetros de configuración.
  * @return motor_error_t Resultado de la inicialización procesado por @ref motor_raise_error.
  */
-motor_error_t motor_config(motor_t *m, motor_config_t *motor_conf){
+motor_error_t motor_config(motor_t *m, const motor_config_t *motor_conf){
     
     if(m == NULL){
         return motor_raise_error(MOTOR_CONFIG_TAG, MOTOR_ERROR_PUNTERO_NULO);
