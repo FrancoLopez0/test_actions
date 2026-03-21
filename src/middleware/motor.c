@@ -1,3 +1,13 @@
+/**
+ * @file motor.c
+ * @author MaximoMonelos (monelosmaximo@gmail.com)
+ * @brief 
+ * @version 0.1
+ * @date 2026-03-21
+ * 
+ * @copyright Copyright (c) 2026
+ * 
+ */
 #include "middleware/motor.h"
 #include "hardware/gpio.h"
 #include "hardware/pwm.h"
