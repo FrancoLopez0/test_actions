@@ -1,62 +1,113 @@
 # Raspberry Pi Pico 2 (RP2350) Template
 
-A professional, modular template for the Raspberry Pi Pico 2 (RP2350) featuring a 3-layer architecture, FreeRTOS SMP support, and a comprehensive SIL/HIL testing strategy.
+Template modular para la **Raspberry Pi Pico 2 (RP2350)** con arquitectura de 3 capas, **FreeRTOS SMP** (multinúcleo), y una estrategia de testing dual **SIL/HIL**.
 
-## 🏗️ Architecture
+---
 
-The project follows a strict 3-layer architecture to ensure modularity and separation of concerns:
+## 🏗️ Arquitectura
 
-- **`src/app/`**: High-level application logic. Contains the main entry point (`firmware.c`) and tasks.
-- **`src/middleware/`**: Shared services and hardware-independent logic (e.g., LED control, sensor processing).
-- **`src/hal/`**: Hardware Abstraction Layer. Direct interaction with the Pico SDK 2.x.
-- **`libs/`**: Internal utility libraries shared across the project.
-- **`third-party/`**: External dependencies (FreeRTOS Kernel, Unity).
+El proyecto sigue una arquitectura estricta de 3 capas con dependencia unidireccional:
 
-## ⚙️ Requirements
+```
+src/app/  →  src/middleware/  →  src/hal/  →  Pico SDK  →  RP2350
+```
 
-- **ARM GCC Toolchain**: `arm-none-eabi-gcc`
-- **Pico SDK 2.x**: Ensure `PICO_SDK_PATH` is set in your environment.
-- **CMake** & **Ninja** (or Make)
-- **Native GCC**: For running SIL tests on the host.
+| Capa | Carpeta | Responsabilidad |
+|------|---------|----------------|
+| **Application** | `src/app/` | Tareas FreeRTOS y lógica de alto nivel |
+| **Middleware** | `src/middleware/` | Servicios independientes del hardware (LED, motor, logging, RTOS wrapper) |
+| **HAL** | `src/hal/` | Hardware Abstraction Layer — única capa que toca el Pico SDK |
 
-## 🚀 Getting Started
+📄 **[Ver `docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md)** — documentación completa de cada carpeta y archivo.
 
-### 1. Build the Firmware (Cross-compilation)
+---
 
-To build the firmware for the RP2350 target:
+## ⚙️ Requisitos
+
+| Herramienta | Versión | Para qué |
+|-------------|---------|----------|
+| `arm-none-eabi-gcc` | — | Compilar firmware para RP2350 |
+| `cmake` | ≥ 3.13 | Build system |
+| `ninja` (o `make`) | — | Build tool |
+| `ruby` | ≥ 3.0 | Ejecutar Ceedling |
+| `ceedling` | última | Build + ejecución de tests SIL |
+| `picotool` | — | Flashear el RP2350 (solo HIL) |
+
+📄 **[Ver `docs/QUICKSTART.md`](docs/QUICKSTART.md)** — guía de instalación detallada para Windows, Linux y macOS.
+
+---
+
+## 🚀 Primeros pasos
+
+### 1. Compilar el firmware
 
 ```bash
 mkdir -p build && cd build
 cmake .. -DPICO_BOARD=pico2 -GNinja
-ninja firmware_binary
+ninja pico2_template
 ```
 
-This will generate `firmware_binary.uf2` in `build/src/app/`.
+El binario `pico2_template.uf2` se genera en `build/src/app/`.
 
-### 2. Run SIL Tests (Host Native)
+### 2. Tests SIL (Software-in-the-Loop)
 
-Software-in-the-Loop (SIL) tests run on your development machine using a native compiler and mocked hardware layers.
+Ejecutan en tu máquina sin necesidad de hardware real:
 
 ```bash
-mkdir -p build_sil && cd build_sil
-cmake -S ../test/SIL -B . -GNinja
-ninja test_blinky
-./test_blinky
+ceedling test:all                    # todos los tests
+ceedling test:blinky                 # un test específico
+./tools/run_test.sh blinky           # script wrapper (Linux/Mac)
+.\tools\run_test.ps1 -TestName blinky  # script wrapper (Windows)
 ```
 
-## 🧪 Testing Strategy
+### 3. Tests HIL (Hardware-in-the-Loop)
 
-- **SIL (Software-in-the-Loop)**: Validates application and middleware logic on the host machine using **Unity**. Hardware dependencies are mocked in `test/SIL/mock/`.
-- **HIL (Hardware-in-the-Loop)**: Targeted tests designed to run on the actual RP2350 hardware to verify HAL and hardware integration.
+Ejecutan en el RP2350 real via picotool:
 
-## 🤖 CI/CD Pipeline
+```bash
+cmake -S . -B build_hil -DPICO_BOARD=pico2 -DENABLE_HIL_TESTS=ON -GNinja
+ninja -C build_hil test_hw
+picotool load -f -x build_hil/test/HIL/test_hw.elf
+```
 
-The project includes a GitHub Actions pipeline (`.github/workflows/ci.yml`) that automatically:
-- Builds the firmware for the RP2350.
-- Compiles and runs SIL tests on the host.
-- (Planned) Performs static analysis with `clang-tidy`.
+📄 **[Ver `docs/QUICKSTART.md`](docs/QUICKSTART.md)** — más ejemplos y variantes.
 
-## 📦 Dependencies
+---
 
-- **FreeRTOS SMP**: Symmetric Multi-Processing support for the dual-core RP2350.
-- **Unity**: Unit testing framework for C.
+## 🔄 Ciclo de desarrollo
+
+Trabajamos con Merge Requests y **GitLab CI/CD**. Nunca se modifica `main` directamente.
+
+```
+git checkout -b feat/mi-feature
+# ... escribir código respetando las 3 capas ...
+ceedling test:all                    # tests SIL locales
+git push origin feat/mi-feature     # → CI/CD automático
+# MR → revisión → tests HIL → merge a main
+```
+
+📄 **[Ver `docs/DEV_CYCLE.md`](docs/DEV_CYCLE.md)** — ciclo completo con fases, ejemplos y checklist.
+
+---
+
+## 🤖 Pipeline CI/CD (GitLab)
+
+El archivo `.gitlab-ci.yml` se ejecuta automáticamente en cada Push y Pull Request:
+
+| Etapa | Herramienta | Verifica |
+|-------|-------------|----------|
+| 🔍 Static Analysis | `cppcheck` | Sintaxis y buenas prácticas |
+| 🏗️ Build (ARM) | `cmake` + `ninja` | El firmware compila para RP2350 |
+| 🧪 SIL Tests | `ceedling` (Unity + CMock) | La lógica de negocio funciona correctamente |
+
+El pipeline es **selectivo**: solo ejecuta los tests impactados por los archivos modificados.
+
+---
+
+## 📦 Dependencias incluidas
+
+| Módulo | Versión | Propósito |
+|--------|---------|-----------|
+| **FreeRTOS SMP** | v202210.01 LTS | Kernel con soporte multinúcleo para RP2350 |
+| **Unity** | — | Framework de testing unitario en C (SIL y HIL) |
+| **CMock** | vía Ceedling | Generación automática de mocks para tests SIL |
