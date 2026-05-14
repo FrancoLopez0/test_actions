@@ -4,7 +4,7 @@
 # It depends on the Pico SDK and the Unity framework.
 
 # Main hardware test
-add_executable(test_hw test_hw_gpio.c )
+add_executable(test_hw test_blinky.c )
 target_link_libraries(test_hw hal pico_stdlib unity)
 target_include_directories(test_hw PRIVATE ${PROJECT_SOURCE_DIR}/src/hal ${PROJECT_SOURCE_DIR}/third-party/unity/include)
 pico_add_extra_outputs(test_hw)
