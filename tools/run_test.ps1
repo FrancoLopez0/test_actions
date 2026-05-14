@@ -1,4 +1,4 @@
-# Usage: .\tools\run_test.ps1 -TestName motor [-HW] [-Port COM7] [-ShowLogs]
+# Usage: .\tools\run_test.ps1 -TestName blinky [-HW] [-Port COM7] [-ShowLogs]
 param (
     [Parameter(Mandatory=$true)]
     [string]$TestName,
@@ -15,16 +15,38 @@ param (
 # Ensure UTF8 for special characters
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# ==========================================
+# RAMA SIL: Software In the Loop (Ceedling)
+# ==========================================
+if (-not $HW) {
+    Write-Host "--- Executing SIL test with Ceedling ---" -ForegroundColor Cyan
+    
+    # Si pasas "all", ejecuta todos los tests. Si pasas un nombre (ej. "blinky"), ejecuta ese.
+    if ($TestName -eq "all") {
+        ceedling test:all
+    } else {
+        # Ceedling espera el prefijo o el nombre exacto, ej: ceedling test:blinky
+        ceedling test:$TestName
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "`nError: Ceedling test failed." -ForegroundColor Red
+        exit 1
+    }
+    
+    # Salimos limpiamente porque Ceedling ya hizo el build y el run
+    exit 0 
+}
+
+# ==========================================
+# RAMA HIL: Hardware In the Loop (Pico 2)
+# ==========================================
 $Target = "test_$TestName"
-$BuildDir = if ($HW) { "build_hil" } else { "build_sil" }
+$BuildDir = "build_hil"
 
 # 1. Build
-Write-Host "--- Building ${Target} ---" -ForegroundColor Cyan
-if ($HW) {
-    & $CMakeCmd -S . -B $BuildDir -DPICO_BOARD=pico2 -GNinja "-DCMAKE_MAKE_PROGRAM=$NinjaPath" -DENABLE_HIL_TESTS=ON | Out-Null
-} else {
-    & $CMakeCmd -S test/SIL -B $BuildDir -GNinja "-DCMAKE_MAKE_PROGRAM=$NinjaPath" | Out-Null
-}
+Write-Host "--- Building ${Target} for Hardware ---" -ForegroundColor Cyan
+& $CMakeCmd -S . -B $BuildDir -DPICO_BOARD=pico2 -GNinja "-DCMAKE_MAKE_PROGRAM=$NinjaPath" -DENABLE_HIL_TESTS=ON | Out-Null
 & $CMakeCmd --build $BuildDir --target $Target | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
@@ -33,77 +55,72 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 2. Flash and Run
-if ($HW) {
-    $ElfFile = "$BuildDir\test\HIL\$Target.elf"
-    Write-Host "Flashing ${ElfFile}..." -ForegroundColor Yellow
-    & $PicotoolCmd load -f -x $ElfFile | Out-Null
+$ElfFile = "$BuildDir\test\HIL\$Target.elf"
+Write-Host "Flashing ${ElfFile}..." -ForegroundColor Yellow
+& $PicotoolCmd load -f -x $ElfFile | Out-Null
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Waiting for ${Port} (Timeout: 20s)..." -ForegroundColor Gray
     
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Waiting for ${Port} (Timeout: 20s)..." -ForegroundColor Gray
-        
-        $portObj = New-Object System.IO.Ports.SerialPort
-        $portObj.PortName = $Port
-        $portObj.BaudRate = 115200
-        $portObj.DtrEnable = $true
-        $portObj.RtsEnable = $true
+    $portObj = New-Object System.IO.Ports.SerialPort
+    $portObj.PortName = $Port
+    $portObj.BaudRate = 115200
+    $portObj.DtrEnable = $true
+    $portObj.RtsEnable = $true
 
-        $attempts = 0
-        while (-not $portObj.IsOpen -and $attempts -lt 40) {
-            try { $portObj.Open() } catch { Start-Sleep -Milliseconds 500; $attempts++; Write-Host "." -NoNewline }
-        }
-
-        if (-not $portObj.IsOpen) {
-            Write-Host "`nError: Could not open ${Port}." -ForegroundColor Red
-            $available = [System.IO.Ports.SerialPort]::GetPortNames()
-            Write-Host "Available ports: [ $($available -join ', ') ]" -ForegroundColor Gray
-            exit 1
-        }
-
-        Write-Host "`nConnected. Monitoring tests...`n" -ForegroundColor Green
-        
-        $passCount = 0
-        $failCount = 0
-
-        try {
-            while ($portObj.IsOpen) {
-                if ($portObj.BytesToRead -gt 0) {
-                    $line = $portObj.ReadLine().Trim()
-                    
-                    # Unity Format: "path/to/file.c:line:test:PASS" or "FAIL"
-                    if ($line -match "(.+\.c):(\d+):(.+):(PASS|FAIL)(.*)") {
-                        # Extract only filename (leaf) from the potential path
-                        $fileFull = $Matches[1]
-                        $file = Split-Path $fileFull -Leaf
-                        
-                        $fline = $Matches[2]
-                        $test = $Matches[3]
-                        $status = $Matches[4]
-                        
-                        $output = ".. ${file}:${fline}:${test}:${status} .."
-                        if ($status -eq "PASS") {
-                            Write-Host $output -ForegroundColor Green
-                            $passCount++
-                        } else {
-                            Write-Host $output -ForegroundColor Red
-                            $failCount++
-                        }
-                    } elseif ($line -match "Tests (\d+) Failures") {
-                        Write-Host "`n${line}" -ForegroundColor Yellow
-                        break
-                    } elseif ($ShowLogs) {
-                        Write-Host $line -ForegroundColor Gray
-                    }
-                }
-                Start-Sleep -Milliseconds 10
-            }
-        } finally {
-            $portObj.Close()
-            Write-Host "`n--- Final Summary ---" -ForegroundColor Cyan
-            Write-Host "Tests Passed: ${passCount}" -ForegroundColor Green
-            Write-Host "Tests Failed: ${failCount}" -ForegroundColor Red
-        }
+    $attempts = 0
+    while (-not $portObj.IsOpen -and $attempts -lt 40) {
+        try { $portObj.Open() } catch { Start-Sleep -Milliseconds 500; $attempts++; Write-Host "." -NoNewline }
     }
-} else {
-    Write-Host "Executing SIL test..." -ForegroundColor Cyan
-    & ".\$BuildDir\$Target.exe"
+
+    if (-not $portObj.IsOpen) {
+        Write-Host "`nError: Could not open ${Port}." -ForegroundColor Red
+        $available = [System.IO.Ports.SerialPort]::GetPortNames()
+        Write-Host "Available ports: [ $($available -join ', ') ]" -ForegroundColor Gray
+        exit 1
+    }
+
+    Write-Host "`nConnected. Monitoring tests...`n" -ForegroundColor Green
+    
+    $passCount = 0
+    $failCount = 0
+
+    try {
+        while ($portObj.IsOpen) {
+            if ($portObj.BytesToRead -gt 0) {
+                $line = $portObj.ReadLine().Trim()
+                
+                # Unity Format: "path/to/file.c:line:test:PASS" or "FAIL"
+                if ($line -match "(.+\.c):(\d+):(.+):(PASS|FAIL)(.*)") {
+                    # Extract only filename (leaf) from the potential path
+                    $fileFull = $Matches[1]
+                    $file = Split-Path $fileFull -Leaf
+                    
+                    $fline = $Matches[2]
+                    $test = $Matches[3]
+                    $status = $Matches[4]
+                    
+                    $output = ".. ${file}:${fline}:${test}:${status} .."
+                    if ($status -eq "PASS") {
+                        Write-Host $output -ForegroundColor Green
+                        $passCount++
+                    } else {
+                        Write-Host $output -ForegroundColor Red
+                        $failCount++
+                    }
+                } elseif ($line -match "Tests (\d+) Failures") {
+                    Write-Host "`n${line}" -ForegroundColor Yellow
+                    break
+                } elseif ($ShowLogs) {
+                    Write-Host $line -ForegroundColor Gray
+                }
+            }
+            Start-Sleep -Milliseconds 10
+        }
+    } finally {
+        $portObj.Close()
+        Write-Host "`n--- Final Summary ---" -ForegroundColor Cyan
+        Write-Host "Tests Passed: ${passCount}" -ForegroundColor Green
+        Write-Host "Tests Failed: ${failCount}" -ForegroundColor Red
+    }
 }

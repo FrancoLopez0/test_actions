@@ -39,17 +39,12 @@ if [ "$HIL_MODE" = true ]; then
     BOARD=${PICO_BOARD:-"pico2"}
     echo "⚙️  Configuring HIL build for board: $BOARD..."
     cmake -S . -B "$BUILD_DIR" -DPICO_BOARD="$BOARD" -GNinja
-else
-    echo "⚙️  Configuring SIL build..."
-    cmake -S test/SIL -B "$BUILD_DIR" -GNinja
-fi
 
-echo "🏗️  Building target: $TARGET..."
-cmake --build "$BUILD_DIR" --target "$TARGET"
+    echo "🏗️  Building target: $TARGET..."
+    cmake --build "$BUILD_DIR" --target "$TARGET"
 
-if [ $? -eq 0 ]; then
-    echo "✅ Build successful."
-    if [ "$HIL_MODE" = true ]; then
+    if [ $? -eq 0 ]; then
+        echo "✅ Build successful."
         ELF_FILE="$BUILD_DIR/test/HIL/${TARGET}.elf"
         echo "⚡ Flashing $ELF_FILE to RP2350..."
         picotool load -x "$ELF_FILE"
@@ -91,10 +86,17 @@ if [ $? -eq 0 ]; then
             fi
         fi
     else
-        echo "🏃 Executing SIL test..."
-        "./$BUILD_DIR/$TARGET"
+        echo "❌ Build failed for target: $TARGET"
+        exit 1
     fi
 else
-    echo "❌ Build failed for target: $TARGET"
-    exit 1
+    echo "⚙️  Running SIL test with Ceedling..."
+    echo "🏃 Executing SIL test: $TEST_NAME"
+    ceedling test:$TEST_NAME
+    
+    if [ $? -ne 0 ]; then
+        echo "❌ Ceedling test failed."
+        exit 1
+    fi
+    echo "✅ SIL test completed."
 fi

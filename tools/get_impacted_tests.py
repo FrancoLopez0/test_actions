@@ -10,15 +10,15 @@ def get_impacted_tests(changed_files):
     full_trigger_patterns = [
         "CMakeLists.txt",
         "FreeRTOSConfig.h",
-        ".github/workflows/*",
+        ".gitlab-ci.yml",
         "pico_sdk_import.cmake",
     ]
     
     # Mapping patterns to test regexes
     mappings = [
-        ("src/hal/*", "SIL_Blinky"),
-        ("src/middleware/mw_led.c", "SIL_Blinky"),
-        ("test/SIL/test_blinky.c", "SIL_Blinky"),
+        ("src/hal/*", "blinky"),
+        ("src/middleware/mw_led.c", "blinky"),
+        ("test/SIL/test_blinky.c", "blinky"),
     ]
 
     skip_patterns = [
@@ -66,7 +66,7 @@ def get_impacted_tests(changed_files):
             # We don't set has_relevant_changes if it's not a source/test file.
 
     if run_all:
-        return "."
+        return "all"
     
     if not impacted_tests and not has_relevant_changes:
         return ""
