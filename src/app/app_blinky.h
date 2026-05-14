@@ -1,6 +1,10 @@
 #ifndef APP_BLINKY_H
 #define APP_BLINKY_H
-
+#include "pico/stdlib.h"
+#include "app_blinky.h"
+#include "mw_led.h"
+#include "FreeRTOS.h"
+#include "task.h"
 /**
  * @file app_blinky.h
  * @brief Blinky application logic.

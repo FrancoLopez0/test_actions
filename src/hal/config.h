@@ -10,11 +10,11 @@ extern "C" {
 
 #include "hardware/adc.h"
 #include "hardware/pwm.h"
-#include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "hardware/irq.h"
 
+#include <stdio.h>
 #include "board_config.h"
 
 void pwm_irq();

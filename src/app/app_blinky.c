@@ -1,9 +1,5 @@
 #include <stdio.h>
-#include "pico/stdlib.h"
-#include "app_blinky.h"
-#include "mw_led.h"
-#include "FreeRTOS.h"
-#include "task.h"
+
 
 // Define LED pin based on the model detected by the SDK
 #ifdef CYW43_WL_GPIO_LED_PIN
@@ -14,7 +10,6 @@
 #endif
 
 void app_blinky_task(void *pvParameters) {
-    (void)pvParameters;
     
     mw_led_init(BLINKY_LED_PIN);
     mw_led_off(BLINKY_LED_PIN);

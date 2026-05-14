@@ -8,10 +8,15 @@
  * This file provides standard Pico SDK includes required by the HAL implementation.
  */
 
-#include "pico/stdlib.h"
-#include "hardware/gpio.h"
-#include "hardware/sync.h"
 
+#ifndef SIL_TESTING
+    #include "pico/stdlib.h"
+    #include "hardware/gpio.h"
+    #include "hardware/sync.h"
+#endif
 /* Common HAL definitions/macros can be added here */
+
+#include <stdint.h>
+#include <stdbool.h>
 
 #endif /* HAL_COMMON_H */
