@@ -1,0 +1,38 @@
+:project:
+  :use_exceptions: FALSE
+  :build_root: build_test
+  :test_file_prefix: test_
+
+:paths:
+  :test:
+    - test/SIL
+  :source:
+    - src/app
+    - src/hal
+    - src/middleware
+  :include:
+    - src/app
+    - src/hal
+    - src/middleware
+
+:defines:
+  :test:
+    - SIL_TESTING
+  :test_preprocess:
+    - SIL_TESTING
+  :compile:
+    - SIL_TESTING
+
+:cmock:
+  :mock_prefix: mock_
+  :when_no_prototypes: :warn
+  :enforce_strict_ordering: TRUE
+  :plugins:
+    - :ignore
+    - :callback
+  :treat_as:
+    uint8:    HEX8
+    uint16:   HEX16
+    uint32:   UINT32
+    int8:     INT8
+    bool:     UINT8
